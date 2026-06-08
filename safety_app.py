@@ -75,7 +75,7 @@ with m_col3:
 
 st.write("")
 
-# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 끝이 둥근 게이지 차트 및 위험도 결과]
+# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 안전한 정통 게이지 차트 및 위험도 결과]
 layout_col1, layout_col2 = st.columns([4, 5])
 
 with layout_col1:
@@ -93,50 +93,38 @@ with layout_col2:
     prediction = model.predict(input_scaled)[0]
     prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
 
-    # 7. 최신 UI 스타일: 막대 끝이 완전히 둥근(Round Cap) 도넛형 게이지 구현
-    # 위험 확률에 맞춰 선명한 신호등 색상이 역동적으로 변경됩니다.
-    if prob < 50:
-        bar_color = '#10B981'  # 선명한 초록 (안전)
-    elif prob < 80:
-        bar_color = '#F59E0B'  # 선명한 황색 (주의)
-    else:
-        bar_color = '#EF4444'  # 선명한 빨강 (위험)
-
-    fig = go.Figure()
-
-    # [트랙 1] 배경이 되는 부드러운 회색 원형 트랙
-    fig.add_trace(go.Barpolar(
-        r=[100], theta=[0], width=[360],
-        marker_color="#F3F4F6", showlegend=False, hoverinfo='skip'
+    # 7. 가장 안전하고 직관적인 정통 Indicator 기반 선명한 신호등 게이지 차트
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = prob,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        number = {
+            'suffix': "%", 
+            'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
+        },
+        gauge = {
+            'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
+            # 내부 막대를 짙은 네이비 블루 컬러로 고급스럽게 마감 처리
+            'bar': {
+                'color': "#1E3A8A", 
+                'thickness': 0.6
+            },
+            'bgcolor': "#F3F4F6",
+            'borderwidth': 1,
+            'bordercolor': "#D1D5DB",
+            # 요청하신 멀리서도 잘 보이는 아주 선명한 세 가지 신호등 색상 적용
+            'steps': [
+                {'range': [0, 50], 'color': '#10B981'},   # 선명한 에메랄드 초록 (안전)
+                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 앰버 황색 (주의)
+                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 크림슨 빨강 (위험)
+            ],
+        }
     ))
-
-    # [트랙 2] 실제 위험 확률 값만큼 차오르는 블루/초록/노랑/빨강의 끝이 둥근 막대
-    fig.add_trace(go.Barpolar(
-        r=[prob], theta=[0], width=[360],
-        marker_color=bar_color, showlegend=False, hoverinfo='skip'
-    ))
-
-    # [레이아웃 조정] 극좌표 설정을 이용한 자연스러운 라운딩 및 중앙 텍스트 배치
-    fig.update_layout(
-        template=None,
-        polar=dict(
-            radialaxis=dict(showticklabels=False, ticks='', range=[0, 100]),
-            angularaxis=dict(showticklabels=False, ticks='', rotation=90, direction="clockwise")
-        ),
-        annotations=[
-            dict(
-                text=f"<span style='font-size:32px; font-weight:bold; color:#1F2937;'>{prob:.1f}%</span><br><span style='font-size:13px; color:#6B7280; font-weight:bold;'>위험 확률</span>",
-                showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", align="center"
-            )
-        ],
-        height=220,
-        margin=dict(l=40, r=40, t=10, b=10)
-    )
-
-    # 극좌표 바 차트의 가장자리를 강제로 제거해 완벽하게 둥근 도넛 바 모양 완성
-    fig.update_traces(marker=dict(line=dict(width=0)), selector=dict(type='barpolar'))
-    fig.update_polars(gridshape='circle', hole=0.78)
     
+    fig.update_layout(
+        height=220, 
+        margin=dict(l=30, r=30, t=20, b=20)
+    )
     st.plotly_chart(fig, use_container_width=True)
 
     # 8. 최종 판정 결과 텍스트창 매핑

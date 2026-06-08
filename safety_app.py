@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 아래와 같이 unsafe_allow_html=True 로 수정합니다.
+# 커스텀 CSS를 이용한 글꼴 및 가독성 디자인 업그레이드 (파이썬 3.14 호환 완료)
 st.markdown("""
     <style>
     .main-title { font-size:40px; font-weight:bold; color:#1E3A8A; margin-bottom:5px; }
@@ -20,11 +20,11 @@ st.markdown("""
     .card-title { font-size:20px; font-weight:600; color:#1F2937; margin-bottom:10px; }
     div[data-testid="stMetricValue"] { font-size: 28px; font-weight: bold; }
     </style>
-""", unsafe_allow_html=True) # 👈 수정한 부분!
+""", unsafe_allow_html=True)
 
 # 2. 헤더 구역 디자인
-st.markdown('<p class="main-title">⚙️ AI 기반 공장 설비 안전 예측 시스템</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">"AI로 널리 산업 현장을 안전하게 이롭게 하다" | SMOTE 기반 고정밀 예측 모델 연동</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-title">⚙️ AI 기반 기계 설비 안전 예측 시스템</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">"AI로 널리 산업 현장을 안전하게 이롭게 하다" | SMOTE 기반 고정밀 분류 모델 연동</p>', unsafe_allow_html=True)
 st.divider()
 
 # 3. AI 모델 및 스케일러 파일 불러오기
@@ -43,7 +43,7 @@ if model is None or scaler is None:
     st.error("⚠️ 'predictive_maintenance_model.pkl' 또는 'factory_scaler.pkl' 파일이 소스코드와 같은 폴더에 있는지 확인해 주세요.")
     st.stop()
 
-# 4. 사이드바 입력 폼 디자인 (편의성 개선: 한눈에 들어오는 가이드 추가)
+# 4. 사이드바 입력 폼 디자인 (편의성 개선: 가이드 툴팁 장착)
 st.sidebar.markdown("### 🔌 실시간 센서 제어판")
 st.sidebar.write("현재 가동 중인 설비의 센서 값을 조절하세요.")
 
@@ -53,7 +53,7 @@ rpm = st.sidebar.number_input("🔄 회전 속도 [RPM]", min_value=1000, max_va
 torque = st.sidebar.slider("⚡ 토크 부하 [Nm]", min_value=3.0, max_value=80.0, value=35.0, step=0.5, help="기계가 받고 있는 회전 부하입니다.")
 tool_wear = st.sidebar.slider("⏳ 공구 마모 시간 [min]", min_value=0, max_value=250, value=10, step=1, help="현재 부품을 교체 없이 사용한 시간입니다.")
 
-# 5. 기계공학 파생변수 실시간 연산
+# 5. 기계공학 파생변수 실시간 연산 (코랩 백엔드와 완벽 결합)
 temp_diff = proc_temp - air_temp
 mechanical_power = torque * (rpm * 2 * np.pi / 60)
 wear_torque_ratio = torque * tool_wear
@@ -65,7 +65,6 @@ input_df = pd.DataFrame([{
 }])
 
 # 6. 메인 화면 대시보드 레이아웃 배치
-# 가로로 3개의 주요 수치를 보여주는 메트릭 카드 배치 (디자인 포인트)
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
     st.metric(label="🔺 실시간 내외부 온도 차이", value=f"{temp_diff:.1f} K", delta=f"{'과열주의' if temp_diff > 11 else '정상'}")
@@ -76,66 +75,71 @@ with m_col3:
 
 st.write("")
 
-# 하단 구역을 반으로 쪼개어 [좌측: 데이터 확인 / 우측: 실시간 게이지 및 진단] 배치
+# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 끝이 둥근 게이지 차트 및 위험도 결과]
 layout_col1, layout_col2 = st.columns([4, 5])
 
 with layout_col1:
     st.markdown('<p class="card-title">📝 센서 수치 분석 데이터 테이블</p>', unsafe_allow_html=True)
-    # 인덱스명을 더 직관적으로 바꿔 가독성 향상
     display_df = input_df.T.rename(columns={0: "현재 모니터링 값"})
     st.dataframe(display_df, use_container_width=True, height=315)
 
 with layout_col2:
     st.markdown('<p class="card-title">🚨 AI 실시간 위험도 진단 결과</p>', unsafe_allow_html=True)
     
-    # AI 추론 시작
+    # AI 스케일링 변환 및 추론 시작
     features = ['공기온도', '공정온도', '회전속도', '토크', '공구마모시간', '온도차이', '기계동력', '마모대비토크']
     input_scaled = scaler.transform(input_df[features])
     
     prediction = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장 확률 (%)
+    prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
 
-    # ====================================================================
-    # 🔥 [여기서부터 복사해서 덮어쓰기 하세요!]
-    # ====================================================================
-    fig = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = prob,
-        domain = {'x': [0, 1], 'y': [0, 1]},
-        number = {
-            'suffix': "%", 
-            'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
-        },
-        gauge = {
-            'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
-            # 막대 두께를 조절하여 양 끝이 자연스럽게 라운딩되도록 처리하고 파란색으로 변경
-            'bar': {
-                'color': "#2563EB", 
-                'line': {'color': "#1D4ED8", 'width': 1},
-                'thickness': 0.55
-            },
-            'bgcolor': "#F3F4F6",
-            'borderwidth': 1,
-            'bordercolor': "#D1D5DB",
-            # 선명한 경고 색상(신호등 색상)으로 교체
-            'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록 (안전)
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 황색 (주의)
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강 (위험)
-            ],
-        }
+    # 7. 최신 UI 스타일: 막대 끝이 완전히 둥근(Round Cap) 도넛형 게이지 구현
+    # 위험 확률에 맞춰 선명한 신호등 색상이 역동적으로 변경됩니다.
+    if prob < 50:
+        bar_color = '#10B981'  # 선명한 초록 (안전)
+    elif prob < 80:
+        bar_color = '#F59E0B'  # 선명한 황색 (주의)
+    else:
+        bar_color = '#EF4444'  # 선명한 빨강 (위험)
+
+    fig = go.Figure()
+
+    # [트랙 1] 배경이 되는 부드러운 회색 원형 트랙
+    fig.add_trace(go.Barpolar(
+        r=[100], theta=[0], width=[360],
+        marker_color="#F3F4F6", showlegend=False, hoverinfo='skip'
     ))
-    
+
+    # [트랙 2] 실제 위험 확률 값만큼 차오르는 블루/초록/노랑/빨강의 끝이 둥근 막대
+    fig.add_trace(go.Barpolar(
+        r=[prob], theta=[0], width=[360],
+        marker_color=bar_color, showlegend=False, hoverinfo='skip'
+    ))
+
+    # [레이아웃 조정] 극좌표 설정을 이용한 자연스러운 라운딩 및 중앙 텍스트 배치
     fig.update_layout(
-        height=220, 
-        margin=dict(l=30, r=30, t=20, b=20),
-        font={'family': "NanumBarunGothic, sans-serif"}
+        template=None,
+        polar=dict(
+            radialaxis=dict(showticklabels=False, ticks='', range=[0, 100]),
+            angularaxis=dict(showticklabels=False, ticks='', rotation=90, direction="clockwise")
+        ),
+        annotations=[
+            dict(
+                text=f"<span style='font-size:32px; font-weight:bold; color:#1F2937;'>{prob:.1f}%</span><br><span style='font-size:13px; color:#6B7280; font-weight:bold;'>위험 확률</span>",
+                showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", align="center"
+            )
+        ],
+        height=220,
+        margin=dict(l=40, r=40, t=10, b=10)
     )
+
+    # 극좌표 바 차트의 가장자리를 강제로 제거해 완벽하게 둥근 도넛 바 모양 완성
+    fig.update_traces(marker=dict(line=dict(width=0)), selector=dict(type='barpolar'))
+    fig.update_polars(gridshape='circle', hole=0.78)
+    
     st.plotly_chart(fig, use_container_width=True)
-    # ====================================================================
-    # 🛑 [여기까지 덮어쓰기 끝]
-    # ====================================================================
-    # 확률값에 따라 직관적인 상태창 메시지 및 아이콘 출력
+
+    # 8. 최종 판정 결과 텍스트창 매핑
     if prediction == 0 and prob < 50:
         st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
     elif prob >= 50 and prob < 80:

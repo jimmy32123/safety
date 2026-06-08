@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import plotly.graph_objects as go  # 고급 시각화 차트용 패키지
+import plotly.graph_objects as go
+import time  # 최초 애니메이션 트리거용 라이브러리
 
 # 1. 웹 페이지 레이아웃 및 테마 스타일 설정
 st.set_page_config(
@@ -12,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS를 이용한 글꼴 및 가독성 디자인 업그레이드 (파이썬 3.14 호환 완료)
+# 커스텀 CSS (파이썬 3.14 호환 완료)
 st.markdown("""
     <style>
     .main-title { font-size:40px; font-weight:bold; color:#1E3A8A; margin-bottom:5px; }
@@ -53,7 +54,7 @@ rpm = st.sidebar.number_input("🔄 회전 속도 [RPM]", min_value=1000, max_va
 torque = st.sidebar.slider("⚡ 토크 부하 [Nm]", min_value=3.0, max_value=80.0, value=35.0, step=0.5, help="기계가 받고 있는 회전 부하입니다.")
 tool_wear = st.sidebar.slider("⏳ 공구 마모 시간 [min]", min_value=0, max_value=250, value=10, step=1, help="현재 부품을 교체 없이 사용한 시간입니다.")
 
-# 5. 기계공학 파생변수 실시간 연산 (코랩 백엔드와 완벽 결합)
+# 5. 기계공학 파생변수 실시간 연산
 temp_diff = proc_temp - air_temp
 mechanical_power = torque * (rpm * 2 * np.pi / 60)
 wear_torque_ratio = torque * tool_wear
@@ -93,37 +94,38 @@ with layout_col2:
     prediction = model.predict(input_scaled)[0]
     prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
 
-    # 7. 실시간 부드러운 무빙 애니메이션 + 요청하신 선명한 신호등 3색 게이지 결합
-    if prob < 50:
-        bar_color = '#111827'  # 안전할 땐 고급스러운 다크 차콜 막대
-    elif prob < 80:
-        bar_color = '#1E3A8A'  # 주의일 땐 묵직한 딥 블루 막대
+    # --- 🛠️ 7. [최초 로딩 차오름 애니메이션 제어 시스템] ---
+    # 처음 새로고침 시에만 0%에서 시작해 목표%까지 게이지바가 쫙 늘어나는 효과 구현
+    if "first_load" not in st.session_state:
+        st.session_state.first_load = True
+        # 최초 로딩 바늘 이동 시각화 프레임 정의
+        start_val = 0.0
     else:
-        bar_color = '#7F1D1D'  # 위험일 땐 경고 의미의 딥 레드 막대
+        start_val = prob
 
-    # 고유 차트 객체를 파괴하지 않고 부드럽게 이어 그리는 Indicator 레이아웃
+    if prob < 50:
+        bar_color = '#111827'  # 안전 (다크 차콜)
+    elif prob < 80:
+        bar_color = '#1E3A8A'  # 주의 (딥 블루)
+    else:
+        bar_color = '#7F1D1D'  # 위험 (딥 레드)
+
+    # 기본 게이지 틀 구성 (요청하신 선명한 3색 신호등 배경 완벽 내장)
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
-        value = prob,
+        value = start_val,  # 로딩 여부에 따라 0 또는 실제 값 대입
         domain = {'x': [0, 1], 'y': [0, 1]},
-        number = {
-            'suffix': "%", 
-            'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
-        },
+        number = {'suffix': "%", 'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}},
         gauge = {
             'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
-            'bar': {
-                'color': bar_color, 
-                'thickness': 0.55
-            },
+            'bar': {'color': bar_color, 'thickness': 0.55},
             'bgcolor': "#F3F4F6",
             'borderwidth': 1,
             'bordercolor': "#D1D5DB",
-            # ★ 요청하신 관제실 전용 선명한 3색 신호등 컬러 완벽 재적용
             'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 에메랄드 초록 (안전)
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 앰버 황색 (주의)
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 크림슨 빨강 (위험)
+                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록
+                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑
+                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강
             ],
         }
     ))
@@ -131,15 +133,20 @@ with layout_col2:
     fig.update_layout(
         height=220, 
         margin=dict(l=30, r=30, t=20, b=20),
-        datarevision=prob, # 데이터가 변할 때 지우지 않고 업데이트하라는 트리거
-        transition={
-            'duration': 350,         # 0.35초 동안 부드럽게 무빙
-            'easing': 'cubic-in-out' # 스무스한 감속 애니메이션 효과
-        }
+        transition={'duration': 700, 'easing': 'cubic-in-out'} # 0.7초 동안 웅장하게 차오름
     )
     
-    # 스트림릿이 차트를 완전히 초기화(렉 유발)하지 않도록 '고정 키(permanent_key)' 지정
-    st.plotly_chart(fig, use_container_width=True, key="permanent_factory_gauge")
+    # 웹 화면에 일단 배치
+    gauge_placeholder = st.empty()
+    gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_live_gauge")
+
+    # 만약 진짜 첫 로딩 상태였다면, 0% 상태를 잠깐 노출한 후 즉시 실제 확률로 게이지를 주입
+    if st.session_state.first_load:
+        time.sleep(0.1)  # 브라우저가 준비될 시간을 살짝 벌어줌
+        fig.update_traces(value=prob)  # 실제 목표 확률 값 주입
+        gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_live_gauge")
+        st.session_state.first_load = False  # 다음 슬라이더 조작부터는 로딩 애니메이션 스킵
+    # ----------------------------------------------------
 
     # 8. 최종 판정 결과 텍스트창 매핑
     if prediction == 0 and prob < 50:

@@ -95,28 +95,46 @@ with layout_col2:
     prediction = model.predict(input_scaled)[0]
     prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장 확률 (%)
 
-    # 고급 시각화: Plotly를 이용한 자동차 계기판 형태의 게이지 차트 생성 (최고의 디자인 포인트)
+    # ====================================================================
+    # 🔥 [여기서부터 복사해서 덮어쓰기 하세요!]
+    # ====================================================================
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = prob,
         domain = {'x': [0, 1], 'y': [0, 1]},
-        number = {'suffix': "%", 'font': {'size': 24}},
+        number = {
+            'suffix': "%", 
+            'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
+        },
         gauge = {
-            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-            'bar': {'color': "#1F2937"},
-            'bgcolor': "white",
-            'borderwidth': 2,
-            'bordercolor': "gray",
+            'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
+            # 막대 두께를 조절하여 양 끝이 자연스럽게 라운딩되도록 처리하고 파란색으로 변경
+            'bar': {
+                'color': "#2563EB", 
+                'line': {'color': "#1D4ED8", 'width': 1},
+                'thickness': 0.55
+            },
+            'bgcolor': "#F3F4F6",
+            'borderwidth': 1,
+            'bordercolor': "#D1D5DB",
+            # 선명한 경고 색상(신호등 색상)으로 교체
             'steps': [
-                {'range': [0, 50], 'color': '#D1FAE5'},   # 연초록 (안전)
-                {'range': [50, 80], 'color': '#FEF3C7'},  # 연노랑 (주의)
-                {'range': [80, 100], 'color': '#FEE2E2'}  # 연빨강 (위험)
+                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록 (안전)
+                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 황색 (주의)
+                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강 (위험)
             ],
         }
     ))
-    fig.update_layout(height=220, margin=dict(l=20, r=20, t=20, b=20))
+    
+    fig.update_layout(
+        height=220, 
+        margin=dict(l=30, r=30, t=20, b=20),
+        font={'family': "NanumBarunGothic, sans-serif"}
+    )
     st.plotly_chart(fig, use_container_width=True)
-
+    # ====================================================================
+    # 🛑 [여기까지 덮어쓰기 끝]
+    # ====================================================================
     # 확률값에 따라 직관적인 상태창 메시지 및 아이콘 출력
     if prediction == 0 and prob < 50:
         st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")

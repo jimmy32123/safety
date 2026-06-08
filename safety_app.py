@@ -75,7 +75,7 @@ with m_col3:
 
 st.write("")
 
-# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 안전한 정통 게이지 차트 및 위험도 결과]
+# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 애니메이션 게이지 및 위험도 결과]
 layout_col1, layout_col2 = st.columns([4, 5])
 
 with layout_col1:
@@ -93,39 +93,54 @@ with layout_col2:
     prediction = model.predict(input_scaled)[0]
     prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
 
-    # 7. 가장 안전하고 직관적인 정통 Indicator 기반 선명한 신호등 게이지 차트
-    fig = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = prob,
-        domain = {'x': [0, 1], 'y': [0, 1]},
-        number = {
-            'suffix': "%", 
-            'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
-        },
-        gauge = {
-            'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
-            # 내부 막대를 짙은 네이비 블루 컬러로 고급스럽게 마감 처리
-            'bar': {
-                'color': "#1E3A8A", 
-                'thickness': 0.6
+    # 7. 실시간 무빙 + 부드러운 애니메이션(Transition)이 적용된 신호등 게이지 차트
+    if prob < 50:
+        bar_color = '#10B981'  # 선명한 초록
+    elif prob < 80:
+        bar_color = '#F59E0B'  # 선명한 황색
+    else:
+        bar_color = '#EF4444'  # 선명한 빨강
+
+    # 프레임 데이터 구조를 생성하여 Plotly 엔진에 부드러운 전환 효과(Transition) 주입
+    fig = go.Figure(
+        data=[go.Indicator(
+            mode="gauge+number",
+            value=prob,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            number={
+                'suffix': "%", 
+                'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}
             },
-            'bgcolor': "#F3F4F6",
-            'borderwidth': 1,
-            'bordercolor': "#D1D5DB",
-            # 요청하신 멀리서도 잘 보이는 아주 선명한 세 가지 신호등 색상 적용
-            'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 에메랄드 초록 (안전)
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 앰버 황색 (주의)
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 크림슨 빨강 (위험)
-            ],
-        }
-    ))
+            gauge={
+                'axis': {'range': [None, 100], 'tickwidth': 1.5, 'tickcolor': "#4B5563"},
+                'bar': {
+                    'color': bar_color,
+                    'thickness': 0.6
+                },
+                'bgcolor': "#F3F4F6",
+                'borderwidth': 1,
+                'bordercolor': "#D1D5DB",
+                'steps': [
+                    {'range': [0, 50], 'color': '#E6F4EA'},   
+                    {'range': [50, 80], 'color': '#FEF3D6'},  
+                    {'range': [80, 100], 'color': '#FCE8E6'}  
+                ],
+            }
+        )]
+    )
     
+    # 애니메이션 속도 및 부드러운 감속 효과(cubic-in-out) 설정
     fig.update_layout(
         height=220, 
-        margin=dict(l=30, r=30, t=20, b=20)
+        margin=dict(l=30, r=30, t=20, b=20),
+        transition={
+            'duration': 400,         # 0.4초 동안 부드럽게 늘어나고 줄어듦
+            'easing': 'cubic-in-out' # 물리 기반 쿠션 효과
+        }
     )
-    st.plotly_chart(fig, use_container_width=True)
+    
+    # 슬라이더 조작 시 렉 없이 실시간 반영되도록 유니크 고유 키 매핑
+    st.plotly_chart(fig, use_container_width=True, key=f"gauge_chart_{prob}")
 
     # 8. 최종 판정 결과 텍스트창 매핑
     if prediction == 0 and prob < 50:

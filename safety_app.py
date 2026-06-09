@@ -94,11 +94,9 @@ with layout_col2:
     prediction = model.predict(input_scaled)[0]
     prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
 
-    # --- 🛠️ 7. [최초 로딩 차오름 애니메이션 제어 시스템] ---
-    # 처음 새로고침 시에만 0%에서 시작해 목표%까지 게이지바가 쫙 늘어나는 효과 구현
+    # --- 🛠️ 7. [최초 로딩 차오름 애니메이션 제어 시스템 - 버그 수정 완료] ---
     if "first_load" not in st.session_state:
         st.session_state.first_load = True
-        # 최초 로딩 바늘 이동 시각화 프레임 정의
         start_val = 0.0
     else:
         start_val = prob
@@ -110,10 +108,10 @@ with layout_col2:
     else:
         bar_color = '#7F1D1D'  # 위험 (딥 레드)
 
-    # 기본 게이지 틀 구성 (요청하신 선명한 3색 신호등 배경 완벽 내장)
+    # 기본 게이지 틀 구성 (선명한 3색 신호등 배경)
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
-        value = start_val,  # 로딩 여부에 따라 0 또는 실제 값 대입
+        value = start_val,
         domain = {'x': [0, 1], 'y': [0, 1]},
         number = {'suffix': "%", 'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}},
         gauge = {
@@ -133,20 +131,21 @@ with layout_col2:
     fig.update_layout(
         height=220, 
         margin=dict(l=30, r=30, t=20, b=20),
-        transition={'duration': 700, 'easing': 'cubic-in-out'} # 0.7초 동안 웅장하게 차오름
+        transition={'duration': 700, 'easing': 'cubic-in-out'}
     )
     
-    # 웹 화면에 일단 배치
+    # 웹 화면의 빈 홀더에 첫 번째 상태(0% 또는 현재값) 그리기
     gauge_placeholder = st.empty()
-    gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_live_gauge")
+    gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_base_gauge")
 
-    # 만약 진짜 첫 로딩 상태였다면, 0% 상태를 잠깐 노출한 후 즉시 실제 확률로 게이지를 주입
+    # 진짜 첫 로딩 상태였다면, 0%에서 실제 목표 확률값으로 애니메이션하며 업데이트
     if st.session_state.first_load:
-        time.sleep(0.1)  # 브라우저가 준비될 시간을 살짝 벌어줌
-        fig.update_traces(value=prob)  # 실제 목표 확률 값 주입
-        gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_live_gauge")
-        st.session_state.first_load = False  # 다음 슬라이더 조작부터는 로딩 애니메이션 스킵
-    # ----------------------------------------------------
+        time.sleep(0.1)
+        fig.update_traces(value=prob)  # 목표 위험 확률 주입
+        # ★ 중복 키 에러 해결: 업데이트할 때는 중복을 피해 고유 키 이름을 "factory_active_gauge"로 다르게 변경합니다.
+        gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_active_gauge")
+        st.session_state.first_load = False
+    # -----------------------------------------------------------------------
 
     # 8. 최종 판정 결과 텍스트창 매핑
     if prediction == 0 and prob < 50:

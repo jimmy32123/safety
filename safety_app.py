@@ -76,25 +76,26 @@ with m_col3:
 
 st.write("")
 
-# 하단 대시보드 분할 [좌측 4 : 우측 5]
-layout_col1, layout_col2 = st.columns([4, 5])
+# 7. 하단 대시보드 좌우 분할 비율 조정 [좌측 5 : 우측 5 반반 황금 분배]
+layout_col1, layout_col2 = st.columns([5, 5])
 
 with layout_col1:
     st.markdown('<p class="card-title">📝 센서 수치 분석 데이터 테이블</p>', unsafe_allow_html=True)
     display_df = input_df.T.rename(columns={0: "현재 모니터링 값"})
-    st.dataframe(display_df, use_container_width=True, height=315)
+    # 테이블 높이를 정밀하게 확장하여 우측 레이아웃과의 대칭 균형을 맞춥니다.
+    st.dataframe(display_df, use_container_width=True, height=450)
 
 with layout_col2:
     st.markdown('<p class="card-title">🚨 AI 실시간 위험도 진단 결과</p>', unsafe_allow_html=True)
     
-    # AI 스케일링 변환 및 실시간 추론 진행
+    # AI 추론 진행
     features = ['공기온도', '공정온도', '회전속도', '토크', '공구마모시간', '온도차이', '기계동력', '마모대비토크']
     input_scaled = scaler.transform(input_df[features])
     
     prediction = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1] * 100  # 위험 확률 (%)
+    prob = model.predict_proba(input_scaled)[0][1] * 100
 
-    # --- 7. [최초 로딩 애니메이션 제어 트리거] ---
+    # 최초 애니메이션 제어 트리거
     if "first_load" not in st.session_state:
         st.session_state.first_load = True
         start_val = 0.0
@@ -108,7 +109,7 @@ with layout_col2:
     else:
         bar_color = '#7F1D1D'  # 위험 (딥 레드)
 
-    # 선명한 신호등 3색 베이스 구성
+    # 3색 신호등 게이지
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = start_val,
@@ -121,17 +122,17 @@ with layout_col2:
             'borderwidth': 1,
             'bordercolor': "#D1D5DB",
             'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강
+                {'range': [0, 50], 'color': '#10B981'},   
+                {'range': [50, 80], 'color': '#F59E0B'},  
+                {'range': [80, 100], 'color': '#EF4444'}  
             ],
         }
     ))
     
+    # 한쪽으로 치우쳐 보이지 않도록 게이지 크기 조절 및 상하 여백 정렬
     fig.update_layout(
-        height=220, 
-        margin=dict(l=30, r=30, t=20, b=20),
-        transition={'duration': 700, 'easing': 'cubic-in-out'}
+        height=200, 
+        margin=dict(l=40, r=40, t=10, b=10)
     )
     
     gauge_placeholder = st.empty()
@@ -142,22 +143,16 @@ with layout_col2:
         fig.update_traces(value=prob)
         gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_active_gauge")
         st.session_state.first_load = False
-    # ----------------------------------------------------
 
     # ====================================================================
-    # 🎛️ 8. 밸런스 패치 완료된 AI 원인 상세 진단 및 현장 조치 매뉴얼 (2, 3번)
+    # 🎛️ 8. AI 원인 상세 진단 및 현장 조치 매뉴얼 (2, 3번) - 위치 밸런스 조정
     # ====================================================================
-    st.write("")
-    
-    # 진단 항목 분배용 리스트 초기화
     fault_reasons = []
     action_steps = []
 
-    # 🟡 [CASE 1: 주의 상태] 위험 확률 50% ~ 80% 미만 일 때의 골고루 분배된 가이드라인
+    # 🟡 [주의 상태] 위험 확률 50% ~ 80% 미만
     if 50 <= prob < 80:
         st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** 누적 부하로 인해 주의가 필요합니다. (위험 확률: {prob:.1f}%)")
-        
-        # 특정 수치가 유독 튀지 않더라도, 상대적으로 높은 센서들을 찾아 골고루 원인 표기
         if temp_diff > 9.5:
             fault_reasons.append("• **[미세 발열 발생]** 부품 간의 마찰열이 조금씩 축적되고 있습니다. (ΔT: {temp_diff:.1f} K)")
             action_steps.append("- 공장 공조 장치를 확인하고 설비 주변 환기 상태를 점검해 주세요.")
@@ -167,16 +162,13 @@ with layout_col2:
         if tool_wear > 120:
             fault_reasons.append("• **[공구 노후화 진행]** 현재 공구의 마모 시간이 절반 이상 경과하였습니다. ({tool_wear}분 가동)")
             action_steps.append("- 다음 정기 점검 교체 대상 리스트에 본 설비를 등록해 주세요.")
-            
-        # 복합 원인 디폴트 가이드
         if not fault_reasons:
             fault_reasons.append("• **[설비 열화 전조 현상]** 센서들의 개별 수치는 정상이나, 복합적인 경미한 열화 수치가 시작되었습니다.")
             action_steps.append("- 회전 속도(RPM)를 현재 수치보다 5~10% 줄여 운전하는 것을 권장합니다.")
 
-    # 🔴 [CASE 2: 위험 상태] 위험 확률 80% 이상 일 때의 강력한 긴급 조치 가이드라인
+    # 🔴 [위험 상태] 위험 확률 80% 이상
     elif prob >= 80:
         st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** 심각한 이상 징후가 감지되었습니다. 즉시 조치가 필요합니다! (위험 확률: {prob:.1f}%)")
-        
         if temp_diff > 11.0:
             fault_reasons.append("• 🚨 **[임계 발열 초과]** 온도 차이가 한계를 넘었습니다. 베어링 마찰 손상 또는 윤활 부족 유력.")
             action_steps.append("1. 즉시 냉각 팬의 정상 작동 여부를 확인하고 가동을 잠시 중단하십시오.")
@@ -188,26 +180,25 @@ with layout_col2:
         if tool_wear > 180:
             fault_reasons.append("• 🚨 **[공구 마모 한계 도달]** 공구 날의 유효 수명이 다해 파손 위험이 극도로 높습니다.")
             action_steps.append("1. 현재 작업 사이클이 끝나는 즉시 장비를 멈추고 새 공구 부품으로 정비하십시오.")
-            
         if not fault_reasons:
             fault_reasons.append("• 🚨 **[복합 임계치 고장 패턴]** 특정 단일 수치보다는 가동 파워 대비 급격한 부하 밸런스 붕괴 현상입니다.")
             action_steps.append("1. 설비 가동 모드를 안전 모드(Manual)로 강제 전환 후 유지보수 팀에 전파하십시오.")
 
-    # 🟢 [CASE 3: 정상 상태] 위험 확률 50% 미만
+    # 🟢 [정상 상태] 위험 확률 50% 미만
     else:
         st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n\n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
+        # 정상 상태일 때도 우측 영역이 텅 비어 보이지 않도록 부드러운 가이드를 채워 균형을 맞춥니다.
+        fault_reasons.append("• **[상태 진단]** 모든 센서의 실시간 인입 수치가 정상 가이드라인 범주 내에 있습니다.")
+        action_steps.append("- 특이사항 없음: 현재 설정된 작업 부하(SOP)를 그대로 유지하며 모니터링하십시오.")
 
-    # 👁️ 주의나 위험 상태일 때만 상세 분석 모니터링 expander 박스를 깔끔하게 노출
-    if prob >= 50:
-        with st.expander("🔍 AI 정밀 원인 진단 및 현장 조치 매뉴얼 보기", expanded=True):
-            st.markdown("#### 📊 AI가 분석한 주요 이상 원인")
-            for reason in fault_reasons:
-                st.write(reason)
-                
-            st.markdown("---")
+    # 👁️ 상세 분석 창 배치 (항상 노출하여 테이블과 높이를 맞춤)
+    with st.expander("🔍 AI 정밀 원인 진단 및 현장 조치 매뉴얼", expanded=True):
+        st.markdown("#### 📊 AI가 분석한 주요 이상 원인")
+        for reason in fault_reasons:
+            st.write(reason)
             
-            st.markdown("#### 🛠️ 현장 작업자 실시간 대응 지침 (SOP)")
-            for step in action_steps:
-                st.write(step)
-                
-            st.markdown("<p style='font-size:12px; color:#9CA3AF; margin-top:10px;'>* 본 지침은 정밀 정비 전 설비 파손을 막기 위한 AI 추천 조치 매뉴얼입니다.</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        st.markdown("#### 🛠️ 현장 작업자 실시간 대응 지침 (SOP)")
+        for step in action_steps:
+            st.write(step)

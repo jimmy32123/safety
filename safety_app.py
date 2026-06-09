@@ -44,7 +44,7 @@ if model is None or scaler is None:
     st.error("⚠️ 'predictive_maintenance_model.pkl' 또는 'factory_scaler.pkl' 파일이 소스코드와 같은 폴더에 있는지 확인해 주세요.")
     st.stop()
 
-# 4. 사이드바 입력 폼 디자인 (편의성 개선: 가이드 툴팁 장착)
+# 4. 사이드바 입력 폼 디자인
 st.sidebar.markdown("### 🔌 실시간 센서 제어판")
 st.sidebar.write("현재 가동 중인 설비의 센서 값을 조절하세요.")
 
@@ -121,9 +121,9 @@ with layout_col2:
             'borderwidth': 1,
             'bordercolor': "#D1D5DB",
             'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록 (안전)
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑 (주의)
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강 (위험)
+                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록
+                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑
+                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강
             ],
         }
     ))
@@ -134,7 +134,6 @@ with layout_col2:
         transition={'duration': 700, 'easing': 'cubic-in-out'}
     )
     
-    # 중복 키 에러 방지 처리 완료된 플레이스홀더 렌더링
     gauge_placeholder = st.empty()
     gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_base_gauge")
 
@@ -146,51 +145,60 @@ with layout_col2:
     # ----------------------------------------------------
 
     # ====================================================================
-    # 🎛️ 8. AI 원인 상세 진단 및 현장 조치 매뉴얼 매핑 (2, 3번 기능)
+    # 🎛️ 8. 밸런스 패치 완료된 AI 원인 상세 진단 및 현장 조치 매뉴얼 (2, 3번)
     # ====================================================================
     st.write("")
     
-    # [정상 / 안전 판정]
-    if prediction == 0 and prob < 50:
-        st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n\n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
-        
-    # [주의 및 위험 판정 시 다이내믹 원인 추적 분석 블록 발동]
-    else:
-        fault_reasons = []
-        action_steps = []
-        
-        # 도메인 지식 기반 규칙 매핑
-        if temp_diff > 11.0:
-            fault_reasons.append("• **[발열 이상]** 내외부 온도 차이(ΔT)가 과도하게 발생 중입니다. (베어링 윤활 부족 및 내부 마찰 의심)")
-            action_steps.append("1. 냉각수 주입 라인 및 냉각 팬 가동 상태를 점검하십시오.")
-            action_steps.append("2. 설비 주요 구동부에 그리스(윤활유)를 도포하십시오.")
-            
-        if torque > 55.0:
-            fault_reasons.append("• **[과토크 부하]** 토크 수치가 임계치(55 Nm)를 초과했습니다. (소재 결착, 가공 부하 급증 또는 기어박스 이상 의심)")
-            action_steps.append("1. 가공 중인 원자재의 공급 속도(Feed Rate)를 하향 조절하십시오.")
-            action_steps.append("2. 척(Chuck)이나 스핀들에 이물질이 끼었는지 육안 점검하십시오.")
-            
-        if tool_wear > 180:
-            fault_reasons.append("• **[공구 마모 임박]** 누적 마모 시간이 유효 한계 수치(180분)를 넘어섰습니다. (칩 배출 불량 및 정밀도 저하 발생 중)")
-            action_steps.append("1. 현재 공정 단계가 종료되는 즉시 부품(Insert Tip 등)을 교체하십시오.")
-            action_steps.append("2. 절삭유 분사 압력을 높여 마찰열을 일시적으로 낮추십시오.")
-            
-        if rpm > 2500 and torque > 45.0:
-            fault_reasons.append("• **[과부하 밸런스 붕괴]** 고속 회전 중에 고토크가 동시에 걸려 기계 동력이 한계치에 도달했습니다.")
-            action_steps.append("1. 주축 회전 속도(RPM)를 제어판에서 15% 감속 조치하십시오.")
+    # 진단 항목 분배용 리스트 초기화
+    fault_reasons = []
+    action_steps = []
 
-        # 복합 원인 예외 처리
+    # 🟡 [CASE 1: 주의 상태] 위험 확률 50% ~ 80% 미만 일 때의 골고루 분배된 가이드라인
+    if 50 <= prob < 80:
+        st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** 누적 부하로 인해 주의가 필요합니다. (위험 확률: {prob:.1f}%)")
+        
+        # 특정 수치가 유독 튀지 않더라도, 상대적으로 높은 센서들을 찾아 골고루 원인 표기
+        if temp_diff > 9.5:
+            fault_reasons.append("• **[미세 발열 발생]** 부품 간의 마찰열이 조금씩 축적되고 있습니다. (ΔT: {temp_diff:.1f} K)")
+            action_steps.append("- 공장 공조 장치를 확인하고 설비 주변 환기 상태를 점검해 주세요.")
+        if torque > 45.0:
+            fault_reasons.append("• **[토크 부하 상승]** 기계 구동부에 평소보다 다소 높은 저항 부하가 걸리고 있습니다.")
+            action_steps.append("- 주입되는 원자재의 속도 또는 공급 밸런스가 치우쳐져 있는지 점검해 주세요.")
+        if tool_wear > 120:
+            fault_reasons.append("• **[공구 노후화 진행]** 현재 공구의 마모 시간이 절반 이상 경과하였습니다. ({tool_wear}분 가동)")
+            action_steps.append("- 다음 정기 점검 교체 대상 리스트에 본 설비를 등록해 주세요.")
+            
+        # 복합 원인 디폴트 가이드
         if not fault_reasons:
-            fault_reasons.append("• **[복합 패턴 고장]** 단일 센서 임계치는 정상 범위이나, 복합 센서 수치 조합이 고장 전조 패턴과 일치합니다.")
-            action_steps.append("1. 설비 운전 모드를 '수동(Manual)'으로 전환하고 정밀 정비 진단을 대기하십시오.")
+            fault_reasons.append("• **[설비 열화 전조 현상]** 센서들의 개별 수치는 정상이나, 복합적인 경미한 열화 수치가 시작되었습니다.")
+            action_steps.append("- 회전 속도(RPM)를 현재 수치보다 5~10% 줄여 운전하는 것을 권장합니다.")
 
-        # 상태별 상단 카드 노출
-        if prob < 80:
-            st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** 누적 부하로 인해 주의가 필요합니다. (위험 확률: {prob:.1f}%)")
-        else:
-            st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** 심각한 이상 징후가 감지되었습니다. 즉시 가동 중단을 고려하십시오! (위험 확률: {prob:.1f}%)")
+    # 🔴 [CASE 2: 위험 상태] 위험 확률 80% 이상 일 때의 강력한 긴급 조치 가이드라인
+    elif prob >= 80:
+        st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** 심각한 이상 징후가 감지되었습니다. 즉시 조치가 필요합니다! (위험 확률: {prob:.1f}%)")
+        
+        if temp_diff > 11.0:
+            fault_reasons.append("• 🚨 **[임계 발열 초과]** 온도 차이가 한계를 넘었습니다. 베어링 마찰 손상 또는 윤활 부족 유력.")
+            action_steps.append("1. 즉시 냉각 팬의 정상 작동 여부를 확인하고 가동을 잠시 중단하십시오.")
+            action_steps.append("2. 주요 회전 부위에 긴급 윤활 그리스(Grease) 주입공정을 지시하십시오.")
+        if torque > 55.0:
+            fault_reasons.append("• 🚨 **[과토크 락 경고]** 기계가 견딜 수 있는 토크 한계선을 침범했습니다. 이물질 결착 의심.")
+            action_steps.append("1. 메인 가공 장치의 원자재 투입 라인 스핀들 속도를 비상 감속하십시오.")
+            action_steps.append("2. 가공 피드 라인 내부의 물리적 칩(Chip) 결착 여부를 육안 검사하십시오.")
+        if tool_wear > 180:
+            fault_reasons.append("• 🚨 **[공구 마모 한계 도달]** 공구 날의 유효 수명이 다해 파손 위험이 극도로 높습니다.")
+            action_steps.append("1. 현재 작업 사이클이 끝나는 즉시 장비를 멈추고 새 공구 부품으로 정비하십시오.")
             
-        # 상세 진단서 리포트 출력 구역 (접이식 아코디언 컴포넌트)
+        if not fault_reasons:
+            fault_reasons.append("• 🚨 **[복합 임계치 고장 패턴]** 특정 단일 수치보다는 가동 파워 대비 급격한 부하 밸런스 붕괴 현상입니다.")
+            action_steps.append("1. 설비 가동 모드를 안전 모드(Manual)로 강제 전환 후 유지보수 팀에 전파하십시오.")
+
+    # 🟢 [CASE 3: 정상 상태] 위험 확률 50% 미만
+    else:
+        st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n\n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
+
+    # 👁️ 주의나 위험 상태일 때만 상세 분석 모니터링 expander 박스를 깔끔하게 노출
+    if prob >= 50:
         with st.expander("🔍 AI 정밀 원인 진단 및 현장 조치 매뉴얼 보기", expanded=True):
             st.markdown("#### 📊 AI가 분석한 주요 이상 원인")
             for reason in fault_reasons:
@@ -198,7 +206,7 @@ with layout_col2:
                 
             st.markdown("---")
             
-            st.markdown("#### 🛠 ... 현장 작업자 실시간 대응 지침 (SOP)")
+            st.markdown("#### 🛠️ 현장 작업자 실시간 대응 지침 (SOP)")
             for step in action_steps:
                 st.write(step)
                 

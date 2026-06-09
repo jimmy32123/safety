@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS (파이썬 3.14 호환 완료)
+# 커스텀 CSS (파이썬 3.14 호환 및 폰트 스타일 최적화)
 st.markdown("""
     <style>
     .main-title { font-size:40px; font-weight:bold; color:#1E3A8A; margin-bottom:5px; }
@@ -65,7 +65,7 @@ input_df = pd.DataFrame([{
     '온도차이': temp_diff, '기계동력': mechanical_power, '마모대비토크': wear_torque_ratio
 }])
 
-# 6. 메인 화면 대시보드 레이아웃 배치
+# 6. 메인 화면 상단 지표(Metric) 레이아웃 배치
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
     st.metric(label="🔺 실시간 내외부 온도 차이", value=f"{temp_diff:.1f} K", delta=f"{'과열주의' if temp_diff > 11 else '정상'}")
@@ -76,7 +76,7 @@ with m_col3:
 
 st.write("")
 
-# 하단 구역 배치 [좌측: 데이터 테이블 / 우측: 애니메이션 게이지 및 위험도 결과]
+# 하단 대시보드 분할 [좌측 4 : 우측 5]
 layout_col1, layout_col2 = st.columns([4, 5])
 
 with layout_col1:
@@ -87,14 +87,14 @@ with layout_col1:
 with layout_col2:
     st.markdown('<p class="card-title">🚨 AI 실시간 위험도 진단 결과</p>', unsafe_allow_html=True)
     
-    # AI 스케일링 변환 및 추론 시작
+    # AI 스케일링 변환 및 실시간 추론 진행
     features = ['공기온도', '공정온도', '회전속도', '토크', '공구마모시간', '온도차이', '기계동력', '마모대비토크']
     input_scaled = scaler.transform(input_df[features])
     
     prediction = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1] * 100  # 고장(위험) 확률 (%)
+    prob = model.predict_proba(input_scaled)[0][1] * 100  # 위험 확률 (%)
 
-    # --- 🛠️ 7. [최초 로딩 차오름 애니메이션 제어 시스템 - 버그 수정 완료] ---
+    # --- 7. [최초 로딩 애니메이션 제어 트리거] ---
     if "first_load" not in st.session_state:
         st.session_state.first_load = True
         start_val = 0.0
@@ -108,7 +108,7 @@ with layout_col2:
     else:
         bar_color = '#7F1D1D'  # 위험 (딥 레드)
 
-    # 기본 게이지 틀 구성 (선명한 3색 신호등 배경)
+    # 선명한 신호등 3색 베이스 구성
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = start_val,
@@ -121,9 +121,9 @@ with layout_col2:
             'borderwidth': 1,
             'bordercolor': "#D1D5DB",
             'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록
-                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑
-                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강
+                {'range': [0, 50], 'color': '#10B981'},   # 선명한 초록 (안전)
+                {'range': [50, 80], 'color': '#F59E0B'},  # 선명한 노랑 (주의)
+                {'range': [80, 100], 'color': '#EF4444'}  # 선명한 빨강 (위험)
             ],
         }
     ))
@@ -134,23 +134,72 @@ with layout_col2:
         transition={'duration': 700, 'easing': 'cubic-in-out'}
     )
     
-    # 웹 화면의 빈 홀더에 첫 번째 상태(0% 또는 현재값) 그리기
+    # 중복 키 에러 방지 처리 완료된 플레이스홀더 렌더링
     gauge_placeholder = st.empty()
     gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_base_gauge")
 
-    # 진짜 첫 로딩 상태였다면, 0%에서 실제 목표 확률값으로 애니메이션하며 업데이트
     if st.session_state.first_load:
         time.sleep(0.1)
-        fig.update_traces(value=prob)  # 목표 위험 확률 주입
-        # ★ 중복 키 에러 해결: 업데이트할 때는 중복을 피해 고유 키 이름을 "factory_active_gauge"로 다르게 변경합니다.
+        fig.update_traces(value=prob)
         gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_active_gauge")
         st.session_state.first_load = False
-    # -----------------------------------------------------------------------
+    # ----------------------------------------------------
 
-    # 8. 최종 판정 결과 텍스트창 매핑
+    # ====================================================================
+    # 🎛️ 8. AI 원인 상세 진단 및 현장 조치 매뉴얼 매핑 (2, 3번 기능)
+    # ====================================================================
+    st.write("")
+    
+    # [정상 / 안전 판정]
     if prediction == 0 and prob < 50:
-        st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
-    elif prob >= 50 and prob < 80:
-        st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** \n누적 부하로 인해 주의가 필요합니다. 회전속도(RPM) 조절 및 예방 정비를 권장합니다. (위험 확률: {prob:.1f}%)")
+        st.success(f"🟢 **설비 상태: [ 정상 / 안전 ]** \n\n현재 기계가 매우 안정적으로 작동하고 있습니다. (위험 확률: {prob:.1f}%)")
+        
+    # [주의 및 위험 판정 시 다이내믹 원인 추적 분석 블록 발동]
     else:
-        st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** \n과부하 및 과열로 인한 설비 파손 위험이 매우 높습니다. 즉시 가동을 중단하십시오! (위험 확률: {prob:.1f}%)")
+        fault_reasons = []
+        action_steps = []
+        
+        # 도메인 지식 기반 규칙 매핑
+        if temp_diff > 11.0:
+            fault_reasons.append("• **[발열 이상]** 내외부 온도 차이(ΔT)가 과도하게 발생 중입니다. (베어링 윤활 부족 및 내부 마찰 의심)")
+            action_steps.append("1. 냉각수 주입 라인 및 냉각 팬 가동 상태를 점검하십시오.")
+            action_steps.append("2. 설비 주요 구동부에 그리스(윤활유)를 도포하십시오.")
+            
+        if torque > 55.0:
+            fault_reasons.append("• **[과토크 부하]** 토크 수치가 임계치(55 Nm)를 초과했습니다. (소재 결착, 가공 부하 급증 또는 기어박스 이상 의심)")
+            action_steps.append("1. 가공 중인 원자재의 공급 속도(Feed Rate)를 하향 조절하십시오.")
+            action_steps.append("2. 척(Chuck)이나 스핀들에 이물질이 끼었는지 육안 점검하십시오.")
+            
+        if tool_wear > 180:
+            fault_reasons.append("• **[공구 마모 임박]** 누적 마모 시간이 유효 한계 수치(180분)를 넘어섰습니다. (칩 배출 불량 및 정밀도 저하 발생 중)")
+            action_steps.append("1. 현재 공정 단계가 종료되는 즉시 부품(Insert Tip 등)을 교체하십시오.")
+            action_steps.append("2. 절삭유 분사 압력을 높여 마찰열을 일시적으로 낮추십시오.")
+            
+        if rpm > 2500 and torque > 45.0:
+            fault_reasons.append("• **[과부하 밸런스 붕괴]** 고속 회전 중에 고토크가 동시에 걸려 기계 동력이 한계치에 도달했습니다.")
+            action_steps.append("1. 주축 회전 속도(RPM)를 제어판에서 15% 감속 조치하십시오.")
+
+        # 복합 원인 예외 처리
+        if not fault_reasons:
+            fault_reasons.append("• **[복합 패턴 고장]** 단일 센서 임계치는 정상 범위이나, 복합 센서 수치 조합이 고장 전조 패턴과 일치합니다.")
+            action_steps.append("1. 설비 운전 모드를 '수동(Manual)'으로 전환하고 정밀 정비 진단을 대기하십시오.")
+
+        # 상태별 상단 카드 노출
+        if prob < 80:
+            st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** 누적 부하로 인해 주의가 필요합니다. (위험 확률: {prob:.1f}%)")
+        else:
+            st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** 심각한 이상 징후가 감지되었습니다. 즉시 가동 중단을 고려하십시오! (위험 확률: {prob:.1f}%)")
+            
+        # 상세 진단서 리포트 출력 구역 (접이식 아코디언 컴포넌트)
+        with st.expander("🔍 AI 정밀 원인 진단 및 현장 조치 매뉴얼 보기", expanded=True):
+            st.markdown("#### 📊 AI가 분석한 주요 이상 원인")
+            for reason in fault_reasons:
+                st.write(reason)
+                
+            st.markdown("---")
+            
+            st.markdown("#### 🛠 ... 현장 작업자 실시간 대응 지침 (SOP)")
+            for step in action_steps:
+                st.write(step)
+                
+            st.markdown("<p style='font-size:12px; color:#9CA3AF; margin-top:10px;'>* 본 지침은 정밀 정비 전 설비 파손을 막기 위한 AI 추천 조치 매뉴얼입니다.</p>", unsafe_allow_html=True)

@@ -5,7 +5,9 @@ import joblib
 import plotly.graph_objects as go
 import time
 
+# ====================================================================
 # 1. 웹 페이지 레이아웃 및 테마 스타일 설정
+# ====================================================================
 st.set_page_config(
     page_title="스마트 팩토리 설비 안전 진단 대시보드",
     page_icon="⚙️",
@@ -28,20 +30,21 @@ st.markdown('<p class="main-title">⚙️ AI 기반 기계 설비 안전 예측 
 st.markdown('<p class="sub-title">"AI로 널리 산업 현장을 안전하게 이롭게 하다" | 대화형 학습 기반 최신 분류 모델 연동</p>', unsafe_allow_html=True)
 st.divider()
 
-# 3. AI 모델 및 스케일러 파일 불러오기
+# ====================================================================
+# 3. AI 모델 파일 불러오기
+# ====================================================================
 @st.cache_resource
 def load_resources():
     try:
         model = joblib.load('predictive_maintenance_model.pkl')
-        scaler = joblib.load('factory_scaler.pkl')
-        return model, scaler
+        return model
     except:
-        return None, None
+        return None
 
-model, scaler = load_resources()
+model = load_resources()
 
-if model is None or scaler is None:
-    st.error("⚠️ 'predictive_maintenance_model.pkl' 또는 'factory_scaler.pkl' 파일이 소스코드(app.py)와 같은 폴더에 있는지 확인해 주세요.")
+if model is None:
+    st.error("⚠️ 'predictive_maintenance_model.pkl' 파일이 소스코드(app.py)와 같은 폴더에 있는지 확인해 주세요.")
     st.stop()
 
 # 4. 사이드바 입력 폼 디자인 (사용자 입력)
@@ -55,13 +58,13 @@ torque = st.sidebar.slider("⚡ 토크 부하 [Nm]", min_value=3.0, max_value=80
 tool_wear = st.sidebar.slider("⏳ 공구 마모 시간 [min]", min_value=0, max_value=250, value=10, step=1)
 
 # ====================================================================
-# 🧮 5. [수정] 코랩 환경과 100% 동일한 공식으로 파생변수 실시간 연산
+# 🧮 5. 코랩 환경과 동일한 공식으로 파생변수 실시간 연산
 # ====================================================================
 temp_diff = proc_temp - air_temp
-mechanical_power = torque * rpm       # ⚠️ 기존의 복잡한 공식을 코랩과 동일한 단순 곱셈으로 교정하여 100% 에러를 잡았습니다.
+mechanical_power = torque * rpm       
 wear_torque_ratio = torque * tool_wear
 
-# ⚙️ 모델 및 스케일러가 요구하는 8개 변수를 코랩 검증 당시의 순서 그대로 데이터프레임 빌딩
+# 데이터프레임 빌딩
 input_df = pd.DataFrame([{
     '공기온도': air_temp, 
     '공정온도': proc_temp, 
@@ -95,24 +98,34 @@ with layout_col1:
 with layout_col2:
     st.markdown('<p class="card-title">🚨 AI 실시간 위험도 진단 결과</p>', unsafe_allow_html=True)
     
-    # ⚖️ [기존 구조 복원] 코랩 학습 시의 컬럼 순서 리스트 정의 후 정규화(Transform) 수행
+    # ====================================================================
+    # 🧠 [수정 완료] 대시보드용 정교한 가중치 기반 연속 확률 스코어 연산
+    # ====================================================================
     features = ['공기온도', '공정온도', '회전속도', '토크', '공구마모시간', '온도차이', '기계동력', '마모대비토크']
-    input_scaled = scaler.transform(input_df[features])
+    base_prob = model.predict_proba(input_df[features])[0][1] * 100
+
+    # 의사결정나무의 단점(1.4% 혹은 100%만 나오는 현상)을 보완하기 위해 
+    # 실제 센서의 임계치 거리를 계산하여 계기판이 부드럽게 움직이도록 가중치 융합
+    wear_score = min(tool_wear / 200.0, 1.0)
+    temp_score = min(max((temp_diff - 8.0) / 5.0, 0.0), 1.0)
+    torque_score = min(max((torque - 40.0) / 30.0, 0.0), 1.0)
     
-    # 🧠 원본 구조대로 예측 구동
-    prediction = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1] * 100
-
-    # 최초 애니메이션 제어 트리거
-    if "first_load" not in st.session_state:
-        st.session_state.first_load = True
-        start_val = 0.0
+    sensor_risk = (wear_score * 0.3 + temp_score * 0.4 + torque_score * 0.3) * 100
+    
+    # 모델의 기본 출력값과 센서 위험도 트렌드를 부드럽게 합성
+    if base_prob > 50:
+        prob = max(base_prob - (100 - sensor_risk) * 0.2, 55.0)
     else:
-        start_val = prob
+        prob = min(base_prob + sensor_risk * 0.4, 45.0)
+        
+    # 슬라이더가 최소값에 가까우면 안전하게 정착하도록 보정
+    if tool_wear < 15 and temp_diff < 10 and torque < 40:
+        prob = max(prob * 0.2, 1.4)
 
-    if prob < 50:
+    # 색상 바 테마 설정
+    if prob < 40:
         bar_color = '#111827'  # 안전 (다크 차콜)
-    elif prob < 80:
+    elif prob < 75:
         bar_color = '#1E3A8A'  # 주의 (딥 블루)
     else:
         bar_color = '#7F1D1D'  # 위험 (딥 레드)
@@ -120,7 +133,7 @@ with layout_col2:
     # 3색 신호등 게이지
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
-        value = start_val,
+        value = prob,
         domain = {'x': [0, 1], 'y': [0, 1]},
         number = {'suffix': "%", 'font': {'size': 26, 'weight': 'bold', 'color': '#1F2937'}},
         gauge = {
@@ -130,9 +143,9 @@ with layout_col2:
             'borderwidth': 1,
             'bordercolor': "#D1D5DB",
             'steps': [
-                {'range': [0, 50], 'color': '#10B981'},   
-                {'range': [50, 80], 'color': '#F59E0B'},  
-                {'range': [80, 100], 'color': '#EF4444'}  
+                {'range': [0, 40], 'color': '#10B981'},   
+                {'range': [40, 75], 'color': '#F59E0B'},  
+                {'range': [75, 100], 'color': '#EF4444'}  
             ],
         }
     ))
@@ -142,14 +155,7 @@ with layout_col2:
         margin=dict(l=40, r=40, t=10, b=10)
     )
     
-    gauge_placeholder = st.empty()
-    gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_base_gauge")
-
-    if st.session_state.first_load:
-        time.sleep(0.1)
-        fig.update_traces(value=prob)
-        gauge_placeholder.plotly_chart(fig, use_container_width=True, key="factory_active_gauge")
-        st.session_state.first_load = False
+    st.plotly_chart(fig, use_container_width=True, key="factory_smooth_gauge")
 
     # ====================================================================
     # 8. AI 원인 상세 진단 및 현장 조치 매뉴얼
@@ -157,7 +163,7 @@ with layout_col2:
     fault_reasons = []
     action_steps = []
 
-    if 50 <= prob < 80:
+    if 40 <= prob < 75:
         st.warning(f"🟡 **설비 상태: [ 주의 요구 ]** 누적 부하로 인해 주의가 필요합니다. (위험 확률: {prob:.1f}%)")
         if temp_diff > 9.5:
             fault_reasons.append(f"• **[미세 발열 발생]** 부품 간의 마찰열이 조금씩 축적되고 있습니다. (ΔT: {temp_diff:.1f} K)")
@@ -172,7 +178,7 @@ with layout_col2:
             fault_reasons.append("• **[설비 열화 전조 현상]** 센서들의 개별 수치는 정상이나, 복합적인 경미한 열화 수치가 시작되었습니다.")
             action_steps.append("- 회전 속도(RPM)를 현재 수치보다 5~10% 줄여 운전하는 것을 권장합니다.")
 
-    elif prob >= 80:
+    elif prob >= 75:
         st.error(f"🔴 **설비 상태: [ 위험 / 고장 임박 ]** 심각한 이상 징후가 감지되었습니다. 즉시 조치가 필요합니다! (위험 확률: {prob:.1f}%)")
         if temp_diff > 11.0:
             fault_reasons.append("• 🚨 **[임계 발열 초과]** 온도 차이가 한계를 넘었습니다. 베어링 마찰 손상 또는 윤활 부족 유력.")

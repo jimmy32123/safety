@@ -5,7 +5,9 @@ import joblib
 import plotly.graph_objects as go
 import time
 
+# ====================================================================
 # 1. 웹 페이지 레이아웃 및 테마 스타일 설정
+# ====================================================================
 st.set_page_config(
     page_title="스마트 팩토리 설비 안전 진단 대시보드",
     page_icon="⚙️",
@@ -28,21 +30,22 @@ st.markdown('<p class="main-title">⚙️ AI 기반 기계 설비 안전 예측 
 st.markdown('<p class="sub-title">"AI로 널리 산업 현장을 안전하게 이롭게 하다" | 대화형 학습 기반 최신 분류 모델 연동</p>', unsafe_allow_html=True)
 st.divider()
 
-# 3. AI 모델 및 스케일러 파일 불러오기
+# ====================================================================
+# 3. AI 모델 파일 불러오기 (오류를 유발하는 스케일러는 제외)
+# ====================================================================
 @st.cache_resource
 def load_resources():
     try:
-        # 코랩에서 files.download()로 받은 최신 파일들과 매핑됩니다.
+        # 원본 데이터로 직접 학습된 모델 파일만 깔끔하게 불러옵니다.
         model = joblib.load('predictive_maintenance_model.pkl')
-        scaler = joblib.load('factory_scaler.pkl')
-        return model, scaler
+        return model
     except:
-        return None, None
+        return None
 
-model, scaler = load_resources()
+model = load_resources()
 
-if model is None or scaler is None:
-    st.error("⚠️ 'predictive_maintenance_model.pkl' 또는 'factory_scaler.pkl' 파일이 소스코드(app.py)와 같은 폴더에 있는지 확인해 주세요.")
+if model is None:
+    st.error("⚠️ 'predictive_maintenance_model.pkl' 파일이 소스코드(app.py)와 같은 폴더에 있는지 확인해 주세요.")
     st.stop()
 
 # 4. 사이드바 입력 폼 디자인 (사용자 입력)
@@ -56,13 +59,13 @@ torque = st.sidebar.slider("⚡ 토크 부하 [Nm]", min_value=3.0, max_value=80
 tool_wear = st.sidebar.slider("⏳ 공구 마모 시간 [min]", min_value=0, max_value=250, value=10, step=1)
 
 # ====================================================================
-# 🧮 5. [중요] 최신 코랩 환경과 동일한 공식으로 파생변수 실시간 연산
+# 🧮 5. [수정 완료] 코랩 환경과 100% 동일한 공식으로 파생변수 실시간 연산
 # ====================================================================
 temp_diff = proc_temp - air_temp
-mechanical_power = torque * (rpm * 2 * np.pi / 60)
+mechanical_power = torque * rpm       # 코랩 학습 당시와 동일하게 단순 곱셈으로 수정 (100% 뿜어내던 오류 해결 핵심)
 wear_torque_ratio = torque * tool_wear
 
-# ⚙️ 모델 및 스케일러가 요구하는 8개 변수를 코랩 검증 당시의 순서 그대로 데이터프레임 빌딩
+# 모델이 요구하는 8개 변수를 코랩 검증 당시의 순서 그대로 데이터프레임 빌딩
 input_df = pd.DataFrame([{
     '공기온도': air_temp, 
     '공정온도': proc_temp, 
@@ -79,9 +82,9 @@ m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
     st.metric(label="🔺 실시간 내외부 온도 차이", value=f"{temp_diff:.1f} K", delta=f"{'과열주의' if temp_diff > 11 else '정상'}")
 with m_col2:
-    st.metric(label="⚙️ 연산된 기계 동력(Power)", value=f"{mechanical_power/1000:.2f} kW")
+    st.metric(label="⚙️ 연산된 기계 동력 수치", value=f"{mechanical_power:,.0f}")
 with m_col3:
-    st.metric(label="📊 누적 마모 부하량", value=f"{wear_torque_ratio:.1f}")
+    st.metric(label="📊 누적 마모 부하량", value=f"{wear_torque_ratio:,.0f}")
 
 st.write("")
 
@@ -96,13 +99,13 @@ with layout_col1:
 with layout_col2:
     st.markdown('<p class="card-title">🚨 AI 실시간 위험도 진단 결과</p>', unsafe_allow_html=True)
     
-    # ⚖️ [중요] 코랩 학습 시의 컬럼 순서 리스트 정의 후 정규화(Transform) 수행
+    # ====================================================================
+    # 🧠 [수정 완료] 스케일러 변환을 제거하고 원본 데이터프레임을 모델에 직결
+    # ====================================================================
     features = ['공기온도', '공정온도', '회전속도', '토크', '공구마모시간', '온도차이', '기계동력', '마모대비토크']
-    input_scaled = scaler.transform(input_df[features])
     
-    # 🧠 새 모델로 예측 구동
-    prediction = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1] * 100
+    prediction = model.predict(input_df[features])[0]
+    prob = model.predict_proba(input_df[features])[0][1] * 100
 
     # 최초 애니메이션 제어 트리거
     if "first_load" not in st.session_state:
@@ -208,7 +211,7 @@ with layout_col2:
             st.write(step)
 
 # ====================================================================
-# 📈 9. 최신 코랩(의사결정나무+오버샘플러) 기준 검증 스코어 업데이트
+# 9. 최신 코랩(의사결정나무+오버샘플러) 기준 검증 스코어 업데이트
 # ====================================================================
 st.divider()
 st.markdown('<p class="card-title">📊 백엔드 AI 모델 성능 검증 리포트 (Model Evaluation)</p>', unsafe_allow_html=True)
@@ -222,8 +225,8 @@ with e_col1:
     st.caption("전체 예측 중 정상과 고장을 정확히 맞춘 비율")
 
 with e_col2:
-    st.metric(label="🔍 모델 정밀도 (Precision)", value="60.3%")
-    st.progress(0.603)
+    st.metric(label="🔍 모델 정밀도 (Precision)", value="36.0%") # 지환님의 실제 최신 정밀도 반영
+    st.progress(0.360)
     st.caption("AI가 고장이라고 예측한 것 중 진짜 고장인 비율")
 
 with e_col3:
